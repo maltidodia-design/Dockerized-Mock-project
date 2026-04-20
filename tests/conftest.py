@@ -56,3 +56,4 @@ def sample_quiz(app):
     db.session.add(q)
     db.session.commit()
     return q
+

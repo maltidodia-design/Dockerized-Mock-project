@@ -50,3 +50,4 @@ def test_create_and_take_quiz():
     assert r.status_code == 200
     assert b'Score' in r.data
 
+

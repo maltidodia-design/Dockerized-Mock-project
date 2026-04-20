@@ -71,3 +71,4 @@ def test_api_ai_feedback_handles_empty_details(client):
     data = resp.get_json()
     assert 'recommendations' in data
     assert data['recommendations'] == ['practice_more']
+

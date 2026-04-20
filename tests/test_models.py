@@ -52,3 +52,5 @@ def test_db_init_creates_db(tmp_path):
     with flask_app.app_context():
         persisted = Q.query.filter_by(title='Init').first()
         assert persisted is not None
+
+        
