@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Take Quiz: {{ quiz.title }}</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body>
+    <div class="container">
+      <h1>{{ quiz.title }}</h1>
+      <form method="post">
+        {% for q in questions %}
+          <div class="question">
+            <p><strong>Q{{ loop.index }}.</strong> {{ q.text }}</p>
+            {% for c_idx, c in enumerate(q.choices) %}
+              <label><input type="radio" name="question-{{ loop.index0 }}" value="{{ c_idx }}"> {{ c }}</label><br>
+            {% endfor %}
+          </div>
+        {% endfor %}
+        <p><button type="submit">Submit</button> <a href="/">Back</a></p>
+      </form>
+    </div>
+  </body>
+</html>
