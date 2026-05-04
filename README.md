@@ -26,9 +26,13 @@ docker-compose exec web python db_init.py
 
 Running tests:
 
+### Automated Tests
 ```bash
 pytest -q
 ```
+
+### Manual Testing
+For manual testing procedures (UX, Accessibility, AI behavior), refer to [MANUAL_TESTING.md](MANUAL_TESTING.md).
 
 Notes:
 - This is a mock/stub implementation intended for demos and early testing. The AI endpoint is a placeholder.
