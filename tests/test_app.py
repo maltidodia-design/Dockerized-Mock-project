@@ -1,3 +1,24 @@
+def test_api_ai_feedback_handles_missing_data(client):
+    # No JSON
+    resp = client.post('/api/ai_feedback')
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert 'recommendations' in data
+
+    # Malformed JSON
+    resp = client.post('/api/ai_feedback', data='not json', content_type='application/json')
+    assert resp.status_code == 200 or resp.status_code == 400
+
+def test_index_lists_quiz_after_creation(client, app):
+    import json
+    questions = [
+        {'text': 'What is 7 + 3?', 'choices': ['9', '10', '11'], 'answer_index': 1}
+    ]
+    resp = client.post('/create', data={'title': 'Quiz List Test', 'questions': json.dumps(questions)}, follow_redirects=True)
+    assert resp.status_code == 200
+    # Now index should list the quiz
+    resp = client.get('/')
+    assert b'Quiz List Test' in resp.data
 import os
 import sys
 import json
