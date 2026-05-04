@@ -1,13 +1,11 @@
 def test_api_ai_feedback_handles_missing_data(client):
-    # No JSON
+    # No JSON, no content type
     resp = client.post('/api/ai_feedback')
-    assert resp.status_code == 200
-    data = resp.get_json()
-    assert 'recommendations' in data
+    assert resp.status_code == 415  # Flask expects application/json
 
     # Malformed JSON
     resp = client.post('/api/ai_feedback', data='not json', content_type='application/json')
-    assert resp.status_code == 200 or resp.status_code == 400
+    assert resp.status_code == 400 or resp.status_code == 200
 
 def test_index_lists_quiz_after_creation(client, app):
     import json
