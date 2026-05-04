@@ -87,3 +87,4 @@ When performing manual testing, please record the following in a new test report
 4. **Test Case ID:** (from the sections above)
 5. **Status:** (Pass/Fail)
 6. **Notes/Bugs:** If failed, include steps to reproduce and screenshots if possible.
+
