@@ -54,3 +54,4 @@ def test_take_quiz_flow(client, sample_quiz):
     assert r is not None
     assert r.total == 2
     assert r.score == 2
+

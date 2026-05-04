@@ -72,3 +72,5 @@ def test_take_and_result_accessibility(client, sample_quiz):
     # Ensure details list exists
     assert soup.find('ul') is not None
     assert_buttons_have_name(soup)
+
+    

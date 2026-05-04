@@ -1,3 +1,22 @@
+def test_api_ai_feedback_handles_missing_data(client):
+    # No JSON, no content type
+    resp = client.post('/api/ai_feedback')
+    assert resp.status_code == 415  # Flask expects application/json
+
+    # Malformed JSON
+    resp = client.post('/api/ai_feedback', data='not json', content_type='application/json')
+    assert resp.status_code == 400 or resp.status_code == 200
+
+def test_index_lists_quiz_after_creation(client, app):
+    import json
+    questions = [
+        {'text': 'What is 7 + 3?', 'choices': ['9', '10', '11'], 'answer_index': 1}
+    ]
+    resp = client.post('/create', data={'title': 'Quiz List Test', 'questions': json.dumps(questions)}, follow_redirects=True)
+    assert resp.status_code == 200
+    # Now index should list the quiz
+    resp = client.get('/')
+    assert b'Quiz List Test' in resp.data
 import os
 import sys
 import json
@@ -49,4 +68,5 @@ def test_create_and_take_quiz():
     r = client.post(f'/take/{quiz.id}', data={'question-0': '1'})
     assert r.status_code == 200
     assert b'Score' in r.data
+
 
