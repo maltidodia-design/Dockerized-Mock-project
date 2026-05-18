@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: Unit and Integration Tests
+    name: Unit, Integration & E2E Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -21,7 +21,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Run all tests (unit + integration)
+      - name: Run unit + integration tests
         run: |
-          pytest tests/
+          pytest tests/ --ignore=tests/test_e2e.py -v
+      - name: Run E2E tests (real server over HTTP)
+        run: |
+          pytest tests/test_e2e.py -v
 

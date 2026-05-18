@@ -9,6 +9,11 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
+# take_quiz.html uses enumerate() in a Jinja loop; Jinja2 does not expose it by
+# default, so register it as a global. Without this, GET /take/<id> raises
+# UndefinedError and returns HTTP 500 under a real server (gunicorn / python app.py).
+app.jinja_env.globals.update(enumerate=enumerate)
+
 
 class Quiz(db.Model):
     id = db.Column(db.Integer, primary_key=True)
