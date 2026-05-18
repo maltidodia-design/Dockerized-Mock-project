@@ -1,2 +1,8 @@
 /.pytest_cache
 /.venv
+
+# macOS
+.DS_Store
+
+# Local Flask SQLite database (runtime artifact)
+instance/data.db
