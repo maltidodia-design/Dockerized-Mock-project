@@ -5,17 +5,21 @@ WSGI server) so E2E tests exercise the same code path a user hits through
 gunicorn / `python app.py` — unlike the unit/integration tests which use the
 in-process Flask test client.
 
-It is run as a subprocess by `tests/test_e2e.py`:
+It is run as a subprocess by `tests/conftest.py` via the `live_server`
+fixture:
 
     python tests/e2e_server.py <host> <port> <sqlite_db_path>
 
 The database is pointed at an isolated temp SQLite file so E2E runs never
-touch the project's `instance/data.db`.
+touch the project's `instance/data.db`. The override is set in the
+environment BEFORE importing `app`, because Flask-SQLAlchemy 3.x caches the
+engine at SQLAlchemy(app) construction time and a late
+`app.config[SQLALCHEMY_DATABASE_URI] = ...` would be silently ignored.
 """
 import os
 import sys
 
-# Ensure the project root is importable regardless of the subprocess cwd.
+# Project root on sys.path regardless of subprocess cwd.
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
@@ -30,11 +34,12 @@ def main():
     port = int(sys.argv[2])
     db_path = os.path.abspath(sys.argv[3])
 
+    # MUST be set before `from app import ...` — see module docstring.
+    os.environ["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
+
     from werkzeug.serving import make_server
     from app import app, db
 
-    # Isolate the database before any request creates the engine.
-    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
     app.config["TESTING"] = True
 
     with app.app_context():
