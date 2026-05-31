@@ -36,6 +36,13 @@ def main():
 
     # MUST be set before `from app import ...` — see module docstring.
     os.environ["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
+    # Rate-limit knobs tuned for tests: small window so successive tests don't
+    # see leftover timestamps; max chosen so the rate-limit test can trigger
+    # 429 within a tight burst without starving the rest of the suite.
+    # Direct assignment (NOT setdefault): the pytest parent process sets these
+    # high to disable rate-limiting in in-process tests; we must override that.
+    os.environ["RATE_LIMIT_WINDOW"] = "0.1"
+    os.environ["RATE_LIMIT_MAX"] = "20"
 
     from werkzeug.serving import make_server
     from app import app, db

@@ -108,6 +108,17 @@ def test_e2e_invalid_questions_json_returns_400(live_server, http):
 
 
 # --------------------------------------------------------------------------- #
+# E2E-007 — /healthz liveness probe
+# --------------------------------------------------------------------------- #
+def test_e2e_healthz_endpoint(live_server, http):
+    """Health endpoint must respond 200 with a static JSON body and must not
+    touch the database (so it's safe for orchestrator liveness probes)."""
+    resp = http.get(live_server + "/healthz")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok"}
+
+
+# --------------------------------------------------------------------------- #
 # E2E-006 — AI feedback API over real HTTP
 # --------------------------------------------------------------------------- #
 def test_e2e_ai_feedback_api_over_http(live_server, http):

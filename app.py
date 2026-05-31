@@ -1,8 +1,13 @@
 import json
 import os
+import threading
+import time
+from collections import defaultdict
+from datetime import datetime
+from urllib.parse import urlparse
+
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
 
 app = Flask(__name__)
 # Read the DB URI from env so tests (in-process AND live-server subprocess) can
@@ -13,6 +18,10 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
     'SQLALCHEMY_DATABASE_URI', 'sqlite:///data.db'
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# Hard cap on POST body size to limit abuse / accidental memory blow-up.
+app.config['MAX_CONTENT_LENGTH'] = int(
+    os.environ.get('MAX_CONTENT_LENGTH', str(1 * 1024 * 1024))  # 1 MiB
+)
 
 db = SQLAlchemy(app)
 
@@ -21,6 +30,10 @@ db = SQLAlchemy(app)
 # UndefinedError and returns HTTP 500 under a real server (gunicorn / python app.py).
 app.jinja_env.globals.update(enumerate=enumerate)
 
+
+# --------------------------------------------------------------------------- #
+# Models
+# --------------------------------------------------------------------------- #
 
 class Quiz(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -41,6 +54,78 @@ class Result(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+# --------------------------------------------------------------------------- #
+# Cross-cutting middleware: security headers, Origin-based CSRF, rate limit.
+# Kept hand-rolled (no Flask-WTF / Flask-Limiter dep) so the mock product
+# remains dependency-light; the test suites exercise the real protections.
+# --------------------------------------------------------------------------- #
+
+_RATE_LIMIT_WINDOW = float(os.environ.get('RATE_LIMIT_WINDOW', '60'))   # seconds
+_RATE_LIMIT_MAX = int(os.environ.get('RATE_LIMIT_MAX', '60'))           # requests per window per IP
+_rate_state = defaultdict(list)  # ip -> sorted list of timestamps
+_rate_lock = threading.Lock()
+
+
+def _is_rate_limited(ip):
+    if _RATE_LIMIT_MAX <= 0:
+        return False  # disabled
+    now = time.time()
+    cutoff = now - _RATE_LIMIT_WINDOW
+    with _rate_lock:
+        recent = [t for t in _rate_state[ip] if t > cutoff]
+        if len(recent) >= _RATE_LIMIT_MAX:
+            _rate_state[ip] = recent
+            return True
+        recent.append(now)
+        _rate_state[ip] = recent
+        return False
+
+
+@app.before_request
+def _csrf_origin_check():
+    """Minimal CSRF mitigation: reject state-changing requests whose Origin
+    header is set and points to a different host. Same-origin requests (which
+    is what a real form submit from this site produces) are allowed; legacy
+    clients that omit Origin are allowed (Referer fallback could be layered in)."""
+    if request.method in ('POST', 'PUT', 'DELETE', 'PATCH'):
+        origin = request.headers.get('Origin')
+        if origin:
+            origin_host = urlparse(origin).netloc
+            if origin_host and origin_host != request.host:
+                return ('Cross-origin request rejected', 403)
+
+
+@app.before_request
+def _api_rate_limit():
+    if request.path == '/api/ai_feedback' and request.method == 'POST':
+        ip = request.remote_addr or 'unknown'
+        if _is_rate_limited(ip):
+            return jsonify(error='rate_limited'), 429
+
+
+@app.after_request
+def _security_headers(resp):
+    resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    resp.headers.setdefault('X-Frame-Options', 'DENY')
+    resp.headers.setdefault('Content-Security-Policy', "default-src 'self'")
+    resp.headers.setdefault('Referrer-Policy', 'no-referrer')
+    return resp
+
+
+# --------------------------------------------------------------------------- #
+# Routes
+# --------------------------------------------------------------------------- #
+
+@app.route('/healthz')
+def healthz():
+    """Liveness/readiness probe.
+
+    Returns 200 without touching the DB so orchestrators (Docker HEALTHCHECK,
+    k8s liveness, CI smoke) get a meaningful, dependency-free signal.
+    """
+    return jsonify(status='ok'), 200
+
+
 @app.route('/')
 def index():
     quizzes = Quiz.query.order_by(Quiz.created_at.desc()).all()
@@ -51,7 +136,6 @@ def index():
 def create_quiz():
     if request.method == 'POST':
         title = request.form.get('title') or 'Untitled Quiz'
-        # questions posted as JSON string in form field
         questions_raw = request.form.get('questions')
         try:
             questions = json.loads(questions_raw)
@@ -63,7 +147,6 @@ def create_quiz():
         db.session.commit()
         return redirect(url_for('index'))
 
-    # sample question structure to show in form
     sample_questions = [
         {
             'text': 'What is 2 + 2?',
@@ -82,10 +165,16 @@ def take_quiz(quiz_id):
         answers = {}
         for i in range(len(questions)):
             v = request.form.get(f'question-{i}')
-            if v is not None:
+            if v is None:
+                continue
+            # Form tampering: non-integer values used to surface as HTTP 500
+            # (ValueError). Treat as unanswered so the user sees a normal
+            # result page and an audit trail is still recorded.
+            try:
                 answers[str(i)] = int(v)
+            except (ValueError, TypeError):
+                continue
 
-        # grade
         correct = 0
         details = []
         for i, q in enumerate(questions):
@@ -102,15 +191,12 @@ def take_quiz(quiz_id):
         db.session.add(result)
         db.session.commit()
 
-        # call AI feedback stub (internal endpoint) to get explanations for incorrect
-        feedback_resp = None
+        # Call the AI feedback helper directly (NOT via app.test_client().post,
+        # which was an in-process HTTP-to-itself antipattern: it doubled worker
+        # usage, looped through middleware (rate limit!) unnecessarily, and
+        # masked real failure modes).
         try:
-            # lightweight internal call
-            from flask import url_for
-            # send minimal data
-            resp = app.test_client().post('/api/ai_feedback', json={'quiz_id': quiz.id, 'details': details})
-            if resp.status_code == 200:
-                feedback_resp = resp.get_json()
+            feedback_resp = _generate_ai_feedback(details)
         except Exception:
             feedback_resp = {'error': 'feedback unavailable'}
 
@@ -119,26 +205,35 @@ def take_quiz(quiz_id):
     return render_template('take_quiz.html', quiz=quiz, questions=questions)
 
 
-@app.route('/api/ai_feedback', methods=['POST'])
-def ai_feedback():
-    # This is a mock / stub for the AI behavior described in the product requirements.
-    # It takes quiz_id and grading details and returns simple explanations and recommendations.
-    payload = request.get_json() or {}
-    details = payload.get('details', [])
+def _generate_ai_feedback(details_raw):
+    """Pure helper that produces the mock AI feedback payload.
 
+    Kept separate so take_quiz can call it directly (no internal HTTP
+    recursion) AND the public /api/ai_feedback endpoint can call it. Non-dict
+    elements in `details_raw` are skipped — a malformed input used to surface
+    as HTTP 500 (AttributeError on .get for non-dict elements).
+    """
     explanations = []
     improvement_topics = set()
-    for d in details:
+    for d in details_raw or []:
+        if not isinstance(d, dict):
+            continue
         if not d.get('ok'):
             idx = d.get('index')
             explanations.append({'index': idx, 'explanation': f"Review question {idx}: consider re-checking fundamentals."})
             improvement_topics.add('fundamentals')
-
-    resp = {
+    return {
         'explanations': explanations,
         'recommendations': list(improvement_topics) if improvement_topics else ['practice_more']
     }
-    return jsonify(resp)
+
+
+@app.route('/api/ai_feedback', methods=['POST'])
+def ai_feedback():
+    # Non-silent on purpose: a non-JSON request body returns 415 (Flask's
+    # default behaviour); a valid-JSON-but-empty body falls through to `or {}`.
+    payload = request.get_json() or {}
+    return jsonify(_generate_ai_feedback(payload.get('details', [])))
 
 
 if __name__ == '__main__':

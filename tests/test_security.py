@@ -79,30 +79,21 @@ def test_stored_xss_in_title_is_escaped_on_result_page(live_server, http, create
 # marked xfail until then. Remove the xfail decorator as part of the fix PR.
 # --------------------------------------------------------------------------- #
 
-@pytest.mark.xfail(
-    reason=(
-        "Known gap: take_quiz casts form values with int() unchecked, so a "
-        "non-integer answer raises ValueError -> HTTP 500. Should be handled "
-        "as 400 or treated as unanswered. See test_edge_cases.py "
-        "test_take_quiz_non_int_answer_raises."
-    )
-)
 def test_form_tampering_non_int_answer_is_handled_gracefully(live_server, http, create_quiz):
+    """Non-integer answer must NOT 500 — it should be treated as unanswered,
+    score reflects that, and the user sees a normal result page."""
     take_url = create_quiz("Tamper Quiz", [
         {"text": "Q", "choices": ["a", "b"], "answer_index": 1},
     ])
     resp = http.post(take_url, data={"question-0": "not-a-number"})
-    assert resp.status_code != 500, "Form tampering surfaces as HTTP 500 (known gap)"
+    assert resp.status_code == 200, resp.text
+    # Treated as unanswered -> score 0/1 -> a single ❌ on the result page.
+    assert "Score: 0 / 1" in resp.text
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Known gap: no CSRF protection on POST /create. A cross-origin form "
-        "submission is currently accepted. Once Flask-WTF or equivalent is "
-        "wired in this test guards the fix."
-    )
-)
 def test_cross_origin_post_create_is_rejected(live_server, http):
+    """Origin-based CSRF mitigation: a POST whose Origin header doesn't match
+    the host is rejected before it reaches the handler."""
     resp = http.post(
         live_server + "/create",
         data={"title": "csrf-probe", "questions": json.dumps([])},
@@ -114,14 +105,8 @@ def test_cross_origin_post_create_is_rejected(live_server, http):
     )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Known gap: Flask does not set X-Content-Type-Options, X-Frame-Options "
-        "or a Content-Security-Policy by default. Add via Flask-Talisman or a "
-        "small after_request hook."
-    )
-)
 def test_security_response_headers_present(live_server, http):
+    """Baseline security headers must be set on every response."""
     resp = http.get(live_server + "/")
     assert resp.status_code == 200
     headers = {k.lower(): v for k, v in resp.headers.items()}

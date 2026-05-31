@@ -7,5 +7,8 @@ services:
     volumes:
       - .:/app
     environment:
-      - FLASK_ENV=development
+      # Do NOT override FLASK_ENV here — the Dockerfile sets it to "production"
+      # so the Werkzeug debugger (RCE surface) stays unreachable if anyone runs
+      # `python app.py` in this environment. Leave it to the Dockerfile.
+      - PYTHONUNBUFFERED=1
     command: gunicorn app:app -b 0.0.0.0:8000 --workers 2

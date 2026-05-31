@@ -22,6 +22,10 @@ if ROOT not in sys.path:
 # subprocess which (by default) also targets instance/data.db.
 os.environ.setdefault('SQLALCHEMY_DATABASE_URI', 'sqlite:///:memory:')
 
+# Effectively disable the production rate limit for in-process unit tests
+# (where many tests hit /api/ai_feedback through the same test client).
+os.environ.setdefault('RATE_LIMIT_MAX', '999999')
+
 from app import app as flask_app, db, Quiz
 
 # --------------------------------------------------------------------------- #
