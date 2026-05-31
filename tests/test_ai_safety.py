@@ -88,21 +88,18 @@ def test_oversized_payload_handled_without_5xx(live_server, http):
     assert resp.status_code < 500, f"Oversized payload caused server error {resp.status_code}"
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Known gap: ai_feedback iterates `details` and calls `.get()` without "
-        "checking the element type. A non-dict element raises AttributeError -> "
-        "HTTP 500. Validate input shape (or wrap in try/except) and return 400."
-    )
-)
-def test_malformed_details_element_returns_4xx_not_500(live_server, http):
+def test_malformed_details_element_handled_gracefully(live_server, http):
+    """Non-dict elements in `details` must be ignored, not crash the server.
+    The endpoint should return 200 with empty explanations and the default
+    recommendation (since no real wrong-answer dicts were submitted)."""
     resp = http.post(
         live_server + ENDPOINT,
         json={"details": ["not-a-dict", 42, None]},
     )
-    assert resp.status_code != 500, (
-        f"Malformed details element surfaces as HTTP 500 (known gap; got {resp.status_code})"
-    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["explanations"] == []
+    assert "practice_more" in body["recommendations"]
 
 
 # --------------------------------------------------------------------------- #
@@ -184,14 +181,9 @@ def test_response_does_not_contain_safety_indicator_strings(live_server, http, f
 # Known operational gaps — xfail until built
 # --------------------------------------------------------------------------- #
 
-@pytest.mark.xfail(
-    reason=(
-        "Known gap: no rate limiting on /api/ai_feedback. With a real model "
-        "this is a cost-amplification / abuse vector. Add a token bucket and "
-        "verify a 429 once the bucket is exhausted."
-    )
-)
 def test_rate_limit_returns_429_under_burst(live_server, http):
+    """Rate limiting must kick in within a tight burst. With the test-config
+    window (see tests/e2e_server.py) the limit triggers well under 200 calls."""
     last_status = 200
     for _ in range(200):
         resp = http.post(

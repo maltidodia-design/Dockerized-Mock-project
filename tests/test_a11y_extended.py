@@ -42,14 +42,10 @@ def test_page_has_non_empty_title(live_server, http, path):
     )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Known gap: templates use <html> without a lang attribute. Required by "
-        "WCAG 3.1.1 so screen readers select the correct pronunciation engine."
-    )
-)
 @pytest.mark.parametrize("path", PRIMARY_PATHS)
 def test_html_root_declares_language(live_server, http, path):
+    """WCAG 3.1.1 — every page must declare its language so screen readers
+    select the correct pronunciation engine."""
     soup = _soup(http, live_server, path)
     html = soup.find("html")
     assert html is not None and html.get("lang"), (
@@ -89,14 +85,9 @@ def test_no_duplicate_ids(live_server, http, path):
 # Take-quiz page — radio-group semantics
 # --------------------------------------------------------------------------- #
 
-@pytest.mark.xfail(
-    reason=(
-        "Known gap: take_quiz.html wraps each question in <div class=\"question\"> "
-        "instead of <fieldset><legend>. Screen readers cannot announce the "
-        "question text as the group label for the radio set. WCAG 1.3.1 / 3.3.2."
-    )
-)
 def test_take_page_groups_radios_with_fieldset_and_legend(live_server, http, create_quiz):
+    """WCAG 1.3.1 / 3.3.2 — radios for one question must be grouped in a
+    <fieldset> with a <legend> announcing the question text."""
     take_url = create_quiz("A11y Fieldset Quiz", [
         {"text": "Q1", "choices": ["a", "b"], "answer_index": 0},
         {"text": "Q2", "choices": ["x", "y"], "answer_index": 1},

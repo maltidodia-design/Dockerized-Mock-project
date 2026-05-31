@@ -48,10 +48,20 @@ def test_take_quiz_partial_answers(client, sample_quiz):
     assert r.score == 1
 
 
-def test_take_quiz_non_int_answer_raises(client, sample_quiz):
-    # Submitting a non-integer value will raise ValueError when casting to int
-    with pytest.raises(ValueError):
-        client.post(f'/take/{sample_quiz.id}', data={'question-0': 'a', 'question-1': '1'})
+def test_take_quiz_non_int_answer_is_treated_as_unanswered(client, sample_quiz):
+    """Form-tampering / non-integer answer must NOT crash the server.
+    The malformed value is treated as unanswered, the other answers still
+    grade normally, and the user lands on a normal result page."""
+    resp = client.post(
+        f'/take/{sample_quiz.id}',
+        data={'question-0': 'a', 'question-1': '1'},
+    )
+    assert resp.status_code == 200
+    # Q1 unanswered (malformed) + Q2 correct -> 1/2.
+    assert b'Score: 1 / 2' in resp.data
+    r = Result.query.filter_by(quiz_id=sample_quiz.id).first()
+    assert r is not None
+    assert r.score == 1 and r.total == 2
 
 
 def test_db_commit_failure_on_create_quiz_raises(monkeypatch, client):
