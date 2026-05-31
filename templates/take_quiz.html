@@ -10,10 +10,14 @@
       <h1>{{ quiz.title }}</h1>
       <form method="post">
         {% for q in questions %}
+          {# Capture the outer loop's index so the inner loop's `loop` shadow
+             doesn't break radio grouping (real bug: all radios for one
+             question must share a name attribute to form a radio group). #}
+          {% set q_idx = loop.index0 %}
           <div class="question">
             <p><strong>Q{{ loop.index }}.</strong> {{ q.text }}</p>
             {% for c_idx, c in enumerate(q.choices) %}
-              <label><input type="radio" name="question-{{ loop.index0 }}" value="{{ c_idx }}"> {{ c }}</label><br>
+              <label><input type="radio" name="question-{{ q_idx }}" value="{{ c_idx }}"> {{ c }}</label><br>
             {% endfor %}
           </div>
         {% endfor %}

@@ -1,13 +1,25 @@
 import json
+import os
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///data.db'
+# Read the DB URI from env so tests (in-process AND live-server subprocess) can
+# point it at an isolated SQLite before SQLAlchemy(app) below builds the engine.
+# Flask-SQLAlchemy 3.x caches the engine at construction time, so a late
+# app.config[...] override is silently ignored.
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
+    'SQLALCHEMY_DATABASE_URI', 'sqlite:///data.db'
+)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
+
+# take_quiz.html uses enumerate() in a Jinja loop; Jinja2 does not expose it by
+# default, so register it as a global. Without this, GET /take/<id> raises
+# UndefinedError and returns HTTP 500 under a real server (gunicorn / python app.py).
+app.jinja_env.globals.update(enumerate=enumerate)
 
 
 class Quiz(db.Model):
