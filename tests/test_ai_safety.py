@@ -184,6 +184,7 @@ def test_response_does_not_contain_safety_indicator_strings(live_server, http, f
 def test_rate_limit_returns_429_under_burst(live_server, http):
     """Rate limiting must kick in within a tight burst. With the test-config
     window (see tests/e2e_server.py) the limit triggers well under 200 calls."""
+    import time as _time
     last_status = 200
     for _ in range(200):
         resp = http.post(
@@ -194,3 +195,8 @@ def test_rate_limit_returns_429_under_burst(live_server, http):
         if last_status == 429:
             break
     assert last_status == 429, "200 requests in a tight loop without a single 429"
+    # Wait for the sliding window to clear so subsequent tests that POST to
+    # /api/ai_feedback (test_e2e_ai_feedback_api_over_http etc.) start with a
+    # fresh limiter state. RATE_LIMIT_WINDOW is 0.1s in the subprocess; pad
+    # generously.
+    _time.sleep(0.25)

@@ -1,0 +1,9 @@
+# Test / scanner-only dependencies. Not installed in the production image.
+# Floors raised to the CVE-fix versions surfaced by pip-audit:
+#   pytest 8.x:    GHSA-6w46-j5rx-g56g  -> fixed in 9.0.3 (Python 3.10+)
+#   requests 2.32: GHSA-gc5v-m9x4-r6x2  -> fixed in 2.33.0
+#   urllib3 2.6:   PYSEC-2026-141 / 142 -> fixed in 2.7.0
+pytest>=9.0.3
+requests>=2.33.0
+urllib3>=2.7.0
+beautifulsoup4>=4.12.2
